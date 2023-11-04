@@ -1,0 +1,49 @@
+/* vim: set ft=css: */
+
+#app-main-input {
+  width: 1fr;
+}
+
+#app-main-display {
+  width: 2fr;
+}
+
+#input-form-submit-button {
+  padding: 0 1;
+}
+
+#input-form-button-area {
+  width: 100%;
+  align: center top;
+}
+
+#input-form {
+  width: 100%;
+  padding: 0 1;
+}
+
+.input-form-input { 
+  height: auto;
+  margin-bottom: 1;
+}
+.input-form-label {
+}
+
+.simulation-display {
+  height: auto;
+}
+
+.timing-data-elem {
+  height: 1;
+}
+.timing-data-label {
+  margin-right: 1;
+  text-style: underline;
+}
+
+.simulation-variant-header {
+  text-align: center;
+  text-style: bold;
+  width: 100%;
+  margin-bottom: 1;
+}
