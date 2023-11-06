@@ -1,14 +1,11 @@
 from enum import IntFlag, auto
 from typing import cast
-from numpy import minimum
-from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.events import Blur, DescendantBlur, InputEvent
+from textual.events import Blur, DescendantBlur
 from textual.message import Message
 from textual.validation import Integer, Number, Regex
-from textual.widget import Widget
 from textual.widgets import Button, Input, Label, SelectionList, Static
 from textual.widgets.selection_list import Selection
 from textual.reactive import Reactive, reactive
@@ -60,7 +57,7 @@ class InputForm(Static):
                 yield Input(
                     id="input-form-pauli-input",
                     classes="input-form-input-component",
-                    placeholder="As Pauli (i.e X+Y or 3YZ+4Yx)",
+                    placeholder="As Pauli (i.e X+Y or 3YZ+4YX)",
                     validators=[
                         Regex(
                             PauliStringValidator.pauli_string_regex,

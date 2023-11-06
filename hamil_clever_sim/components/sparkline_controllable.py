@@ -1,24 +1,47 @@
 from __future__ import annotations
 
 from fractions import Fraction
-from typing import Callable, ClassVar, Generic, Iterable, Optional, Sequence, TypeVar
+from typing import (
+    Callable,
+    ClassVar,
+    Generic,
+    Iterable,
+    Optional,
+    Sequence,
+    TypeVar,
+    cast,
+)
 
 from rich.color import Color
-from rich.console import Console, ConsoleOptions, RenderResult as RichRenderResult
+from rich.console import Console, ConsoleOptions
+from rich.console import RenderResult as RichRenderResult
 from rich.segment import Segment
 from rich.style import Style
 from textual.app import RenderResult
-from textual.reactive import Reactive, reactive
-
+from textual.reactive import reactive
 from textual.renderables._blend_colors import blend_colors
 from textual.widget import Widget
 
-T = TypeVar("T", int, float)
+# NOTE:
+# This code has been taken from the source code for Textual
+# specifically, these two files:
+# https://github.com/Textualize/textual/blob/main/src/textual/renderables/sparkline.py
+# https://github.com/Textualize/textual/blob/main/src/textual/widgets/_sparkline.py
+#
+# This code has been modified so we are able to highlight a specific data point,
+# giving us the highlight when scrolling through the statevector data table.
+#
+# The code has been directly copied, instead of inheriting a class method,
+# as the first version of the controllable sparkline attempted to capture the
+# output of the rich renderable, and modify it with the highlight colour.
+# However, the output would be flickery and slow down scrolling performance.
+# Implementing it directly and handling the colour at yield time seems to fix this.
 
+T = TypeVar("T", int, float)
 SummaryFunction = Callable[[Sequence[T]], float]
 
 
-class SparklinePrimative(Generic[T]):
+class SparklinePrimitive(Generic[T]):
     BARS = "▁▂▃▄▅▆▇█"
 
     def __init__(
@@ -48,9 +71,7 @@ class SparklinePrimative(Generic[T]):
             if partition:
                 yield partition
 
-    def __rich_console__(
-        self, console: Console, options: ConsoleOptions
-    ) -> RichRenderResult:
+    def __rich_console__(self, _: Console, options: ConsoleOptions) -> RichRenderResult:
         width = self.width or options.max_width
         len_data = len(self.data)
         if len_data == 0:
@@ -80,6 +101,11 @@ class SparklinePrimative(Generic[T]):
             bar_color = blend_colors(min_color, max_color, height_ratio)
             bars_rendered += 1
             bucket_index += step
+
+            # FIXME:
+            # if the current index and the marked index share the the same
+            # bucketed value, then both values will be mistakenly highlighted.
+            # Investigate the code a bit further to determine how to disambiguate.
             if partition == buckets[self.marked_index]:
                 yield Segment(
                     self.BARS[bar_index], Style.from_color(Color.from_rgb(230, 30, 160))
@@ -135,15 +161,18 @@ class Sparkline(Widget):
         if not self.data:
             return "<empty sparkline>"
         _, base = self.background_colors
-        return SparklinePrimative(
-            self.data,
-            width=self.size.width,
-            marked_index=self.marked_index,
-            min_color=(
-                base + self.get_component_styles("sparkline--min-color").color
-            ).rich_color,
-            max_color=(
-                base + self.get_component_styles("sparkline--max-color").color
-            ).rich_color,
-            summary_function=self.summary_function,
+        return cast(
+            RenderResult,
+            SparklinePrimitive(
+                self.data,
+                width=self.size.width,
+                marked_index=self.marked_index,
+                min_color=(
+                    base + self.get_component_styles("sparkline--min-color").color
+                ).rich_color,
+                max_color=(
+                    base + self.get_component_styles("sparkline--max-color").color
+                ).rich_color,
+                summary_function=self.summary_function,
+            ),
         )

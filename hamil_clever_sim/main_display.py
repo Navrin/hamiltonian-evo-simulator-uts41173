@@ -1,7 +1,7 @@
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import ContentSwitcher, Footer, Header, Placeholder, Tab, Tabs
+from textual.widgets import ContentSwitcher, Footer, Header, Tab, Tabs
 from hamil_clever_sim.hamil_runner import SimulationRunner
 
 from hamil_clever_sim.inputs import InputForm

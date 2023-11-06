@@ -1,24 +1,26 @@
 from __future__ import annotations
-from asyncio import Task, coroutines
+from asyncio import Task
 import asyncio
 import time
 import typing as ty
+from typing_extensions import Callable, Optional, OrderedDict, cast
 
 import numpy as np
 import qiskit as q
-from qiskit import QuantumCircuit, qiskit, quantum_info as qi
-from qiskit.providers import Backend
-from qiskit.quantum_info import Operator, Statevector
+from qiskit import quantum_info as qi
+from qiskit.circuit import Instruction
+from qiskit.quantum_info import Operator, SparsePauliOp, Statevector
 
 # this gate implements the U(t) = exp(-itH) operator
 # from qiskit.extensions import HamiltonianGate
 # from qiskit.circuit.library import PauliEvolutionGate as PauliEvGate
 from qiskit.synthesis.evolution.product_formula import evolve_pauli
+from qiskit.visualization.circuit.text import TextDrawing
 from qiskit_aer.backends import StatevectorSimulator
-from qiskit_aer.backends.aerbackend import Result
-from textual.reactive import Reactive, reactive, var
+from scipy.linalg import expm
 
 from hamil_clever_sim.inputs import PauliStringValidator, SimulationKindSet
+from qiskit.visualization.circuit.circuit_visualization import _text_circuit_drawer
 
 
 # TODO: reimplement this code and test it against the qiskit implementation to
@@ -66,7 +68,7 @@ def build_operator_circuit(t, *u_states, N=4, qubits=None) -> Operator:
 
     circ = q.QuantumCircuit(qubits if qubits is not None else u_1(t).num_qubits)
 
-    for u, i in zip(u_states, range(1, len(u_states))):
+    for u, i in zip(u_states, range(1, len(u_states) + 1)):
         circ.append(u(t / N, label=f"U_{i}({t} / {N})"), range(0, circ.num_qubits))
 
     np_op = Operator(circ).power(N)
@@ -82,7 +84,8 @@ def create_u(op):
         paul = evolve_pauli(qi.Pauli(op), t, label=label)
         if label is None:
             label = f"$U_1({t})$"
-        paul.name = f"{label}={paul.name}"
+        # paul.name = f"{label}={paul.name}"
+        paul.name = "unitary_evolve"
         return paul
 
     return u_n
@@ -96,7 +99,8 @@ def create_u_with_coef(op, coef: float):
         paul = evolve_pauli(qi.Pauli(op), weighted_t, label=label)
         if label is None:
             label = f"$U_1({t} * {weight})$"
-        paul.name = f"{label}={paul.name}"
+        # paul.name = f"{label}={paul.name}"
+        paul.name = "unitary_evolve"
 
         return paul
 
@@ -110,7 +114,10 @@ def build_iterative_circuit(t, *u_states, N=4):
     circ = q.QuantumCircuit(u_1(t).num_qubits)
     circ.barrier(label="n=0")
     for n in range(1, N + 1):
-        for u, i in zip(u_states, range(1, len(u_states))):
+        states = list(zip(u_states, range(1, len(u_states) + 1)))
+        print(f"{list(states)=} {repr(u_states)=}")
+        for u, i in states:
+            print(f"{u=} {i=}")
             circ.append(u(t / N, label=f"U_{i}({t} / {N})"), range(0, circ.num_qubits))
         # circ.append(u_1(t/N, label=f"$U_1({t} / {N} )$"), range(0, circ.num_qubits))
         # if u_2 is not None:
@@ -133,6 +140,30 @@ def statevec_backend() -> StatevectorSimulator:
 
 
 backend = statevec_backend()
+
+
+class SimulationCircuitMetadata:
+    factor: int
+    gates: ty.OrderedDict[str, int]
+    # circuit_repr: ty.Optional[Callable[[], TextDrawing]]
+    circuit_repr: Optional[TextDrawing]
+
+    def __init__(
+        self,
+        gates: ty.OrderedDict[Instruction, int],
+        factor: int,
+        drawn: Optional[Callable[[], TextDrawing]] = None,
+    ) -> None:
+        self.factor = factor
+        self.gates = OrderedDict(
+            [(str(instruction), val) for instruction, val in gates.items()]
+        )
+        self.circuit_repr = drawn() if drawn is not None else None
+
+    def get_counts(self) -> ty.Iterable[str]:
+        return iter(
+            [f"{gate}: {val}×{self.factor}" for gate, val in self.gates.items()]
+        )
 
 
 class SimulationTimingData:
@@ -204,6 +235,7 @@ class SimulationRunnerResult:
     async def run(self, callback=None):
         self.timing_data.register_callback(callback)
         if self.type == SimulationKindSet.QC_METHOD:
+            self.get_qc_circuit_metadata()
             return await self.run_qc_simulation()
         elif self.type == SimulationKindSet.OP_METHOD:
             return await self.run_op_simulation()
@@ -260,10 +292,60 @@ class SimulationRunnerResult:
         return self.process(res)
 
     async def run_direct_calc(self):
-        raise NotImplementedError()
+        runner = self.meta
 
-    async def get_qc_circuit_metadata(self):
-        pass
+        paulis_circ = [
+            (term, float(coef) if coef is not None else 1)
+            for term, coef in runner.weighted_paulis
+        ]
+        largest = max([len(term) for term, _ in paulis_circ])
+        init_state = Statevector.from_label("0" * largest)
+
+        pauli_collect = cast(tuple[tuple[str], tuple[float]], tuple(zip(*paulis_circ)))
+        pauli_sparse = SparsePauliOp(list(pauli_collect[0]), np.array(pauli_collect[1]))
+        self.timing_data.build_finished()
+
+        exp = expm(-1j * pauli_sparse.to_matrix() * self.meta.time)
+        self.timing_data.sim_ended()
+        out = Statevector(np.matmul(exp, init_state))
+
+        return self.process(out)
+
+    def get_qc_circuit_metadata(self, with_draw=False):
+        runner = self.meta
+
+        paulis_circ = [
+            create_u_with_coef(term, float(coef) if coef is not None else 1)
+            for term, coef in runner.weighted_paulis
+        ]
+
+        circ = build_iterative_circuit(runner.time, *paulis_circ, N=1)
+
+        decomped = circ.decompose(
+            ["rzx", "rxz", "rzz", "ryy", "rxx", "unitary_evolve"], reps=2
+        )
+        counted = decomped.count_ops()
+
+        # qiskit is mega dumb, as per usual
+        # defer attempting to "draw" until we are
+        # able to put it in a fake stdout context
+        def defer_drawing():
+            drawing = _text_circuit_drawer(
+                decomped,
+                initial_state=False,
+                vertical_compression="high",
+                plot_barriers=False,
+                fold=-1,
+                with_layout=False,
+                encoding="utf8",
+            )
+            return drawing
+
+        return SimulationCircuitMetadata(
+            counted,
+            self.meta.n,
+            drawn=defer_drawing,
+        )
 
 
 class SimulationRunner:
@@ -281,6 +363,8 @@ class SimulationRunner:
             term = match.group("term")
 
             self.weighted_paulis.append((term, coef))
+
+        print(repr(self.weighted_paulis))
 
         self.time = time
         self.n = n

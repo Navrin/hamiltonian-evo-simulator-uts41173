@@ -31,6 +31,7 @@
 
 .simulation-display {
   height: auto;
+  padding-bottom: 3;
 }
 
 .timing-data-elem {
@@ -46,4 +47,35 @@
   text-style: bold;
   width: 100%;
   margin-bottom: 1;
+}
+
+.simulation-variant-info {
+  height: auto;
+  layout: grid;
+  grid-size: 3 1;
+  grid-columns: 30 25w auto;
+  grid-gutter: 3;
+  margin-bottom: 1;
+  grid-rows: 8;
+}
+.simulation-variant-info-meta {
+  height: auto;
+  /* align: center right; */
+  /* content-align: right top; */
+  margin-right: 2;
+  column-span: 1;
+}
+.simulation-variant-info-timing {
+  height: auto;
+}
+.simulation-variant-info-drawn {
+  height: auto;
+  column-span: 1;
+}
+.simulation-variant-info-drawn > Label {
+  padding-bottom: 2;
+}
+
+Rule {
+  margin: 1 0;
 }

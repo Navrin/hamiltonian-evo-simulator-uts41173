@@ -1,13 +1,14 @@
-from time import gmtime, strftime
-from typing import Any
-from rich.text import Text
 from textual import work
 from textual.app import ComposeResult
-from textual.containers import Horizontal, ScrollableContainer
+from textual.containers import (
+    HorizontalScroll,
+    VerticalScroll,
+)
 from textual.reactive import Reactive, reactive
-from textual.widget import Widget
-from textual.widgets import Label, LoadingIndicator, Markdown, Pretty, Rule, Static
+from textual.widgets import Label, Markdown, Rule, Static
 from textual.worker import Worker
+from hamil_clever_sim.components.circuit_drawn import CircuitDrawOutput
+from hamil_clever_sim.components.circuit_metadata import CircuitMetadata
 from hamil_clever_sim.components.statevector_display import StatevectorDisplay
 from hamil_clever_sim.components.timing_data import TimingInformation
 from hamil_clever_sim.hamil_runner import (
@@ -69,6 +70,19 @@ class SimulationVariantResult(Static):
         if self.job is None:
             return
 
+        if self.kind == SimulationKindSet.QC_METHOD:
+            info = self.query_one(".simulation-variant-info", HorizontalScroll)
+            meta = CircuitMetadata(classes="simulation-variant-info-meta")
+
+            print("[ GETTING METADATA ]")
+            meta.data = self.job.get_qc_circuit_metadata(with_draw=True)
+            print("[ FINISHED GETTING METADATA ]")
+            info.mount(meta)
+
+            draw_zone = CircuitDrawOutput(classes="simulation-variant-info-drawn")
+            info.mount(draw_zone)
+            draw_zone.data = meta.data.circuit_repr
+
         self.handle = self.on_job_ready(self.job)
         self.callback = self.create_timing_data_watcher()
 
@@ -108,8 +122,8 @@ class SimulationVariantResult(Static):
 
     def compose(self) -> ComposeResult:
         yield Label(f"via {self.kind}", classes="simulation-variant-header")
-        yield TimingInformation()
-        # Reimplement the cool sparkliner :(
+        with HorizontalScroll(classes="simulation-variant-info"):
+            yield TimingInformation(classes="simulation-variant-info-timing")
         yield StatevectorDisplay()
         yield Rule(line_style="double")
 
@@ -119,7 +133,7 @@ class SimulationVariantResult(Static):
 # children for each kind of simulation to be run.
 # We want these to be seperately processed so that
 # each result can be streamed in.
-class SimulationDisplay(ScrollableContainer):
+class SimulationDisplay(VerticalScroll):
     runner: Reactive[SimulationRunner | None] = reactive(None, layout=True)
     loading = reactive(True)
     classes = "simulation-display"
@@ -132,6 +146,7 @@ class SimulationDisplay(ScrollableContainer):
         header = SimulationHeader(
             "+".join(runner.paulis), str(runner.time), str(runner.n)
         )
+
         self.mount(header)
 
         for sim in runner.kind:

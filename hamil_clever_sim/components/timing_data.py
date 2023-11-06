@@ -26,10 +26,10 @@ class TimingInformation(Static):
     data: Reactive[SimulationTimingData | None] = reactive(
         None, layout=True, always_update=True
     )
-    start = reactive("...")
-    build_time = reactive("...")
-    simulation_time = reactive("...")
-    total_time = reactive("...")
+    start = reactive("...", layout=True)
+    build_time = reactive("...", layout=True)
+    simulation_time = reactive("...", layout=True)
+    total_time = reactive("...", layout=True)
 
     def watch_data(self, update: SimulationTimingData):
         print(self.data)
