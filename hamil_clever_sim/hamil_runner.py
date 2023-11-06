@@ -115,9 +115,7 @@ def build_iterative_circuit(t, *u_states, N=4):
     circ.barrier(label="n=0")
     for n in range(1, N + 1):
         states = list(zip(u_states, range(1, len(u_states) + 1)))
-        print(f"{list(states)=} {repr(u_states)=}")
         for u, i in states:
-            print(f"{u=} {i=}")
             circ.append(u(t / N, label=f"U_{i}({t} / {N})"), range(0, circ.num_qubits))
         # circ.append(u_1(t/N, label=f"$U_1({t} / {N} )$"), range(0, circ.num_qubits))
         # if u_2 is not None:
