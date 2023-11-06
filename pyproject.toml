@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "hamil-clever-sim"
+version = "1.0.0"
+description = ""
+authors = ["Navrin <navman360@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "3.11.6"
+qiskit = "^0.45.0"
+qiskit-aer = "^0.13.0"
+textual = "^0.41.0"
+rich = "^13.6.0"
+numpy = "^1.26.1"
+scipy = "^1.11.3"
+
+
+[tool.poetry.group.dev.dependencies]
+textual-dev = "^1.2.1"
+pytest = "^7.4.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
