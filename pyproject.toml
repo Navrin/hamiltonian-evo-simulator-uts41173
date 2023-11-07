@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hamil-clever-sim"
-version = "1.0.0"
+version = "1.1.0"
 description = ""
 authors = ["Navrin <navman360@gmail.com>"]
 readme = "README.md"
@@ -18,7 +18,17 @@ scipy = "^1.11.3"
 [tool.poetry.group.dev.dependencies]
 textual-dev = "^1.2.1"
 pytest = "^7.4.3"
+qiskit-algorithms = "^0.2.1"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+# deprecation warnings seem to be from the qiskit trotterisation implementation we are using
+# to check against. Therefore we are supressing them because it is annoying and qiskit is annoying
+filterwarnings = [
+  'ignore:.*is deprecated as of qiskit.*:DeprecationWarning',
+  'ignore:.* pending deprecation since Qiskit.*:PendingDeprecationWarning',
+]
