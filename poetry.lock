@@ -882,6 +882,22 @@ scipy = ">=1.0"
 dask = ["dask", "distributed"]
 
 [[package]]
+name = "qiskit-algorithms"
+version = "0.2.1"
+description = "Qiskit Algorithms: A library of quantum computing algorithms"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "qiskit-algorithms-0.2.1.tar.gz", hash = "sha256:fa27babdcabb8613f261743d83d915dd624b1d94737b450d9d0427ed36bd187e"},
+    {file = "qiskit_algorithms-0.2.1-py3-none-any.whl", hash = "sha256:4d83b63921c47fe3d9ee2962c0afcfc6009d42f94f23a2e907e5338f98e3e3f7"},
+]
+
+[package.dependencies]
+numpy = ">=1.17"
+qiskit-terra = ">=0.24"
+scipy = ">=1.4"
+
+[[package]]
 name = "qiskit-terra"
 version = "0.45.0"
 description = "Software for developing quantum computing programs"
@@ -1315,4 +1331,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "3.11.6"
-content-hash = "eea0a9ab87cd273f56d3e9835509eb7e87deb790f7d78663a09b9f76a7aa625a"
+content-hash = "8a34e40d5478dba284f4a14dd581df2f7412c54cf03b5820228af25278124cf4"

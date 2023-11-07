@@ -1,64 +1,62 @@
 from __future__ import annotations
-from asyncio import Task
+
 import asyncio
 import time
 import typing as ty
-from typing_extensions import Callable, Optional, OrderedDict, cast
+from asyncio import Task
 
 import numpy as np
 import qiskit as q
 from qiskit import quantum_info as qi
 from qiskit.circuit import Instruction
 from qiskit.quantum_info import Operator, SparsePauliOp, Statevector
-
-# this gate implements the U(t) = exp(-itH) operator
-# from qiskit.extensions import HamiltonianGate
-# from qiskit.circuit.library import PauliEvolutionGate as PauliEvGate
-from qiskit.synthesis.evolution.product_formula import evolve_pauli
-from qiskit.visualization.circuit.text import TextDrawing
-from qiskit_aer.backends import StatevectorSimulator
-from scipy.linalg import expm
-
-from hamil_clever_sim.inputs import PauliStringValidator, SimulationKindSet
 from qiskit.visualization.circuit.circuit_visualization import _text_circuit_drawer
+from qiskit.visualization.circuit.text import TextDrawing
+from qiskit_aer import AerSimulator
+from scipy.linalg import expm
+from typing_extensions import Callable, Optional, OrderedDict, cast
+
+from hamil_clever_sim.evolve_pauli import evolve_pauli
+from hamil_clever_sim.inputs import PauliStringValidator, SimulationKindSet
 
 
-# TODO: reimplement this code and test it against the qiskit implementation to
-# finally "extract" the evolve_pauli method
-# from https://github.com/DavitKhach/quantum-algorithms-tutorials/blob/master/Hamiltonian_simulation.ipynb
-# and https://medium.com/quantum-untangled/hamiltonian-simulation-with-quantum-computation-fedc7cdc02e0
-# !! this should not be left as-is for final submission !!
-# !! this code is here for reference in case any of these links go dark !!
-def sim_z(t, qc, qubits):
-    for i in range(len(qubits) - 1):
-        qc.cx(qubits[i], qubits[i + 1])
-    qc.rz(-2 * t, qubits[-1])
-    for i in range(len(qubits) - 1, 0, -1):
-        qc.cx(qubits[i - 1], qubits[i])
+def create_u(op, coef: Optional[float] = None):
+    weight = coef if coef is not None else 1.0
+
+    def u_n(t, label=None):
+        weighted_t = t * weight
+        paul = evolve_pauli(qi.Pauli(op), weighted_t, label=label)
+        if label is None:
+            label = f"$U({t} * {weight})$"
+        # paul.name = f"{label}={paul.name}"
+        paul.name = "unitary_evolve"
+        return paul
+
+    return u_n
 
 
-def sim_pauli(arr, t, qc, qubits, coef=1):
-    new_arr = []
-    new_qub = []
-    for idx in range(len(arr)):
-        if arr[idx] != "I":
-            new_arr.append(arr[idx])
-            new_qub.append(qubits[idx])
+def build_iterative_circuit(t: float, *u_states, N=4):
+    # start = time.perf_counter_ns()
+    u_1 = u_states[0]
+    print(u_1(t).num_qubits)
+    circ = q.QuantumCircuit(u_1(t).num_qubits)
+    circ.barrier(label="n=0")
+    # NOTE: don't use the for_loop interface, it seems
+    # to only be of use for when we are performing actions based on
+    # some sort of conditional around the loop within the circuit.
+    # otherwise it spawns a bunch of parameters and causes issues when
+    # trying to decompose the circuit.
+    for n in range(1, N + 1):
+        states = list(zip(u_states, range(1, len(u_states) + 1)))
+        for u, i in states:
+            circ.append(u(t / N, label=f"U_{i}({t} / {N})"), range(0, circ.num_qubits))
+        circ.barrier(label=f"n={n}")
 
-    h_y = 1 / np.sqrt(2) * np.array([[1, -1j], [1j, -1]])
-    for i in range(len(new_arr)):
-        if new_arr[i] == "X":
-            qc.h(new_qub[i])
-        elif new_arr[i] == "Y":
-            qc.unitary(h_y, [new_qub[i]], r"$H_y$")
+    # end = time.perf_counter_ns()
+    # print(f"Construction of iterated circuit took {end - start} ns")
+    circ.save_statevector()  # type:ignore
 
-    sim_z(t, qc, new_qub)
-
-    for i in range(len(new_arr)):
-        if new_arr[i] == "X":
-            qc.h(new_qub[i])
-        elif new_arr[i] == "Y":
-            qc.unitary(h_y, [new_qub[i]], r"$H_y$")
+    return circ
 
 
 def build_operator_circuit(t, *u_states, N=4, qubits=None) -> Operator:
@@ -79,63 +77,10 @@ def build_operator_circuit(t, *u_states, N=4, qubits=None) -> Operator:
     return np_op
 
 
-def create_u(op):
-    def u_n(t, label=None):
-        paul = evolve_pauli(qi.Pauli(op), t, label=label)
-        if label is None:
-            label = f"$U_1({t})$"
-        # paul.name = f"{label}={paul.name}"
-        paul.name = "unitary_evolve"
-        return paul
-
-    return u_n
-
-
-def create_u_with_coef(op, coef: float):
-    weight = coef
-
-    def u_n(t, label=None):
-        weighted_t = t * weight
-        paul = evolve_pauli(qi.Pauli(op), weighted_t, label=label)
-        if label is None:
-            label = f"$U_1({t} * {weight})$"
-        # paul.name = f"{label}={paul.name}"
-        paul.name = "unitary_evolve"
-
-        return paul
-
-    return u_n
-
-
-def build_iterative_circuit(t, *u_states, N=4):
-    start = time.perf_counter_ns()
-    u_1 = u_states[0]
-    print(u_1(t).num_qubits)
-    circ = q.QuantumCircuit(u_1(t).num_qubits)
-    circ.barrier(label="n=0")
-    for n in range(1, N + 1):
-        states = list(zip(u_states, range(1, len(u_states) + 1)))
-        print(f"{list(states)=} {repr(u_states)=}")
-        for u, i in states:
-            print(f"{u=} {i=}")
-            circ.append(u(t / N, label=f"U_{i}({t} / {N})"), range(0, circ.num_qubits))
-        # circ.append(u_1(t/N, label=f"$U_1({t} / {N} )$"), range(0, circ.num_qubits))
-        # if u_2 is not None:
-        #     circ.append(u_2(t/N, label=f"$U_2({t} / {N} )$"), range(0, circ.num_qubits))
-        # if u_3 is not None:
-        #     circ.append(u_3(t/N, label=f"$U_3({t} / {N} )$"), range(0, circ.num_qubits))
-        circ.barrier(label=f"n={n}")
-
-    end = time.perf_counter_ns()
-    print(f"Construction of iterated circuit took {end - start} ns")
-
-    return circ
-
-
-def statevec_backend() -> StatevectorSimulator:
-    from qiskit_aer import statevector_simulator
-
-    backend = statevector_simulator.StatevectorSimulator()
+def statevec_backend() -> AerSimulator:
+    # apparently the statevector sim is being depreciated, thanks qiskit!
+    # backend = statevector_simulator.StatevectorSimulator()
+    backend = AerSimulator(method="statevector")
     return backend
 
 
@@ -199,12 +144,6 @@ class SimulationTimingData:
             + f"\nend_sim={self.end_sim})"
         )
 
-        # we can assume running the simulation is the next
-        # step after building the circuit
-
-    # def sim_started(self):
-    #     self.start_sim = time.perf_counter_ns()
-
     def sim_ended(self):
         self.end_sim = time.perf_counter_ns()
         self.register_update()
@@ -246,7 +185,7 @@ class SimulationRunnerResult:
         runner = self.meta
 
         paulis_circ = [
-            create_u_with_coef(term, float(coef) if coef is not None else 1)
+            create_u(term, float(coef) if coef is not None else 1)
             for term, coef in runner.weighted_paulis
         ]
 
@@ -258,7 +197,6 @@ class SimulationRunnerResult:
         async def poll_job(interval=0.15):
             try:
                 while job.running():
-                    print("Polling = " + str(job.running))
                     await asyncio.sleep(interval)
                 return job.result()
             finally:
@@ -276,7 +214,7 @@ class SimulationRunnerResult:
         runner = self.meta
 
         paulis_circ = [
-            create_u_with_coef(term, float(coef) if coef is not None else 1)
+            create_u(term, float(coef) if coef is not None else 1)
             for term, coef in runner.weighted_paulis
         ]
         largest = max([pc(runner.time).num_qubits for pc in paulis_circ])
@@ -315,7 +253,7 @@ class SimulationRunnerResult:
         runner = self.meta
 
         paulis_circ = [
-            create_u_with_coef(term, float(coef) if coef is not None else 1)
+            create_u(term, float(coef) if coef is not None else 1)
             for term, coef in runner.weighted_paulis
         ]
 
@@ -329,6 +267,10 @@ class SimulationRunnerResult:
         # qiskit is mega dumb, as per usual
         # defer attempting to "draw" until we are
         # able to put it in a fake stdout context
+        # yes, even calling these methods directly
+        # and setting the encoding doesn't work.
+        # it seems to really want the stdout handle,
+        # but we are in a tui context and need to fake it.
         def defer_drawing():
             drawing = _text_circuit_drawer(
                 decomped,
@@ -394,8 +336,8 @@ if __name__ == "__main__":
 
     init_state = Statevector.from_label("0" * len(p1))
 
-    u1 = create_u_with_coef(p1, 3)
-    u2 = create_u_with_coef(p2, 5)
+    u1 = create_u(p1, 3)
+    u2 = create_u(p2, 5)
 
     start_1 = time.perf_counter_ns()
     sim = build_iterative_circuit(t, u1, u2, N=N)

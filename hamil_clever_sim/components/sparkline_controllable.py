@@ -159,7 +159,7 @@ class Sparkline(Widget):
 
     def render(self) -> RenderResult:
         if not self.data:
-            return "<empty sparkline>"
+            return "<awaiting results...>"
         _, base = self.background_colors
         return cast(
             RenderResult,
