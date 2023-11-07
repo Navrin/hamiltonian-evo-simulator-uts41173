@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hamil-clever-sim"
-version = "1.0.0"
+version = "1.1.0"
 description = ""
 authors = ["Navrin <navman360@gmail.com>"]
 readme = "README.md"
