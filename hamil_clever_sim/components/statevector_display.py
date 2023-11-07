@@ -1,4 +1,6 @@
 from itertools import product
+from typing import Tuple
+
 from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
@@ -10,13 +12,13 @@ from textual.widgets import (
 from textual.widgets.data_table import ColumnKey
 
 from hamil_clever_sim.components.sparkline_controllable import Sparkline
+from hamil_clever_sim.hamil_runner import SimulationRunnerResult
 
-COLS = ("|𝜓⟩", "amplitude (ℝ)", "amplitude (ℂ)")
+COLS = ("|𝜓⟩", "amplitude (ℝ)", "amplitude (ℂ)", "probability (%)")
 
 
-# XYZY+XYZX+YXYZ+YXZX+XYZX+YZXY+ZZYX+YXZY
 class StatevectorDisplay(Static):
-    data: Reactive[dict[str, complex] | None] = reactive(None, layout=True)
+    data: Reactive[SimulationRunnerResult.Data | None] = reactive(None, layout=True)
     rows: Reactive[list[tuple[str, str, str]]] = reactive([])
     column_keys: list[ColumnKey] = []
     spark_data: Reactive[list[float]] = reactive([])
@@ -35,14 +37,15 @@ class StatevectorDisplay(Static):
         rows = [
             (
                 f"|{label}⟩",
-                Text("{: .5f}".format(amp.real), justify="right"),
-                "{:+.5f}𝕚".format(amp.imag),
+                Text("{: .5f}".format(entry[0].real), justify="right"),
+                "{:+.5f}𝕚".format(entry[0].imag),
+                Text("{:.2f}%".format(entry[1] * 100), justify="right"),
             )
-            for label, amp in self.data.items()
+            for label, entry in self.data.items()
         ]
         return rows
 
-    def watch_data(self, update: dict[str, complex]):
+    def watch_data(self, update: dict[str, Tuple[complex, float]]):
         if update is None:
             return
 
@@ -67,7 +70,7 @@ class StatevectorDisplay(Static):
 
         assert self.data is not None
 
-        return [abs(self.data.get(state) or 0) for state in states]
+        return [abs((self.data.get(state) or (0,))[0]) for state in states]
 
     @on(DataTable.RowHighlighted)
     def handle_row_select(self, highlight: DataTable.RowHighlighted):

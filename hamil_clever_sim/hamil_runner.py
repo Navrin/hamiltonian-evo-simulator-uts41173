@@ -14,7 +14,7 @@ from qiskit.visualization.circuit.circuit_visualization import _text_circuit_dra
 from qiskit.visualization.circuit.text import TextDrawing
 from qiskit_aer import AerSimulator
 from scipy.linalg import expm
-from typing_extensions import Callable, Optional, OrderedDict, cast
+from typing_extensions import Callable, Optional, OrderedDict, Tuple, cast
 
 from hamil_clever_sim.evolve_pauli import evolve_pauli
 from hamil_clever_sim.inputs import PauliStringValidator, SimulationKindSet
@@ -150,9 +150,10 @@ class SimulationTimingData:
 
 
 class SimulationRunnerResult:
+    Data = dict[str, Tuple[complex, float]]
     type: SimulationKindSet
     meta: SimulationRunner
-    data: dict[str, complex]
+    data: Data
     job: Task[Statevector]
 
     def __init__(self, meta: SimulationRunner):
@@ -167,8 +168,14 @@ class SimulationRunnerResult:
     def set_type(self, type: SimulationKindSet):
         self.type = type
 
-    def process(self, data: Statevector) -> dict[str, complex]:
-        self.data = data.to_dict(decimals=self.meta.OUTPUT_PRECISION)
+    def process(self, data: Statevector) -> Data:
+        out = data.to_dict(decimals=self.meta.OUTPUT_PRECISION)
+        probabilities = data.probabilities_dict(decimals=self.meta.OUTPUT_PRECISION)
+
+        for key, prob in probabilities.items():
+            out[key] = (out[key], prob)
+
+        self.data = out
         return self.data
 
     async def run(self, callback=None):
@@ -359,3 +366,5 @@ if __name__ == "__main__":
         f"[operator method (time ratio {(end_1 - start_1)/(end_2-start_2) }% faster)] = \n",
         pprint.pformat(res.to_dict()),
     )
+
+    print("[statevector probabilities]", pprint.pformat(result.probabilities_dict()))
