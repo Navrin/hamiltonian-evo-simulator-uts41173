@@ -1,3 +1,9 @@
+"""
+This module provides the core simulation and data handling processes for the app.
+We expose a few helper classes to act as the "Model" of the data that the view layer can use.
+
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,13 +20,20 @@ from qiskit.visualization.circuit.circuit_visualization import _text_circuit_dra
 from qiskit.visualization.circuit.text import TextDrawing
 from qiskit_aer import AerSimulator
 from scipy.linalg import expm
-from typing_extensions import Callable, Optional, OrderedDict, cast
+from typing_extensions import Callable, Optional, OrderedDict, Tuple, cast
 
 from hamil_clever_sim.evolve_pauli import evolve_pauli
 from hamil_clever_sim.inputs import PauliStringValidator, SimulationKindSet
 
 
-def create_u(op, coef: Optional[float] = None):
+def create_u(op: str, coef: Optional[float] = None):
+    """Implements operator U=exp(iHt) for a given pauli term, with an optional coefficient.
+
+    :param op: A valid pauli string, single term only.
+    :param coef: A coefficient in the form of a float, that will multiply the time value (from relation $e^{ic_kP_kt}$)
+    :return: A closure that of the form U(t), generating a circuit for a given time value.
+    :rtype: (time: float, label: Optional[str]) -> QuantumCircuit
+    """
     weight = coef if coef is not None else 1.0
 
     def u_n(t, label=None):
@@ -35,7 +48,17 @@ def create_u(op, coef: Optional[float] = None):
     return u_n
 
 
-def build_iterative_circuit(t: float, *u_states, N=4):
+def build_iterative_circuit(t: float, *u_states, N: int = 4):
+    r"""Implements a trotterised circuit from a vararg of U(t) circuits.
+    This method assumes that given trotterised circuits of X+Y and X+Y+Z are valid, then
+    X+Y+Z+X+...+Z are also valid.
+
+
+    :param N: Trotterisation terms / simulation accuracy. Higher values are better, but will balloon the gate count.
+    :param t: How many time steps to simulate for. This term does not introduce more gates, just what the rotation value will be.
+    :return: Returns a circuit that implements $\ket{\psi_t}$
+    :rtype: :class:`QuantumCircuit`
+    """
     # start = time.perf_counter_ns()
     u_1 = u_states[0]
     print(u_1(t).num_qubits)
@@ -59,7 +82,19 @@ def build_iterative_circuit(t: float, *u_states, N=4):
     return circ
 
 
-def build_operator_circuit(t, *u_states, N=4, qubits=None) -> Operator:
+def build_operator_circuit(
+    t, *u_states, N: int = 4, qubits: Optional[int] = None
+) -> Operator:
+    r"""This method implements trotterisation a hamiltonian while also not needing to create a copy of the
+    circuit N times. Instead, the first step of the simulation is taken, and then converted into a unitary operator
+    of form $UU^\dagger=I$. This operator is then taken to the power of N, turning the problem into an optimised linalg computation.
+    This operator can then be fed directly into a prepared :class:`Statevector`, using the :func:`Statevector.evolve` method.
+
+    :param N: Trotterisation terms / simulation accuracy. Higher values are better, but will balloon the gate count.
+    :param t: How many time steps to simulate for. This term does not introduce more gates, just what the rotation value will be.
+    :param qubits: The largest qubit value, in case not all pauli terms are of equal dimensions.
+    :return: An operator that can implement $\ket{\phi_t}$ for a statevector.
+    """
     start = time.perf_counter_ns()
     # we assume all u_gates are of equal dims if qubits arg is not passed
     u_1 = u_states[0]
@@ -88,6 +123,15 @@ backend = statevec_backend()
 
 
 class SimulationCircuitMetadata:
+    """Data model for optional quantum circuit metadata.
+    For displaying the overall gate complexity, and also the
+    drawn form of the circuit.
+
+    :param factor: Represents terms N
+    :param gates: Dictionary of gate -> count mappings
+    :param circuit_repr: Holds the qiskit circuit drawer
+    """
+
     factor: int
     gates: ty.OrderedDict[str, int]
     # circuit_repr: ty.Optional[Callable[[], TextDrawing]]
@@ -112,6 +156,18 @@ class SimulationCircuitMetadata:
 
 
 class SimulationTimingData:
+    """Data model for live updating timing information.
+    This model can be updated in real time, as the simulator/builder progresses
+    through the steps of simulation. This model also acts as a loading bar, to make sure
+    that the user knows the program has not crashed/stalled.
+
+    :param start: When the simulation job began.
+    :param start_as_timestamp: For displaying the actual timestamp, as perf_counter_ns is tricky to turn into a timestamp.
+    :param update_callback: For letting the view model react to internal changes within the class.
+    :param finish_build: When the build was completed, and when the simulation started.
+    :param end_sim: When the simulation ended, and results processed.
+    """
+
     start_as_timestamp = time.localtime()
 
     start: int = time.perf_counter_ns()
@@ -150,9 +206,27 @@ class SimulationTimingData:
 
 
 class SimulationRunnerResult:
+    """
+    This class encapsulates the process of running specific kind of simulation,
+    and processing the output into a standard form that can be displayed via the
+    :class:`~hamil_clever_sim.components.statevector_display.StatevectorDisplay` widget.
+
+    Generating a class per-type allows us to handle each siulation async/on worker threads,
+    such that we can get the output of the much faster methods to display, while the slower methods
+    work in the background.
+
+    :param meta: The :class:`~hamil_clever_sim.hamil_runner.SimulationRunner` that spawned this runner.
+    :param timing_data: A :class:`~hamil_clever_sim.hamil_runner.SimulationTimingData` that is updated for each stage of the simulation.
+    :param type: A single member bitflag from :class:`~hamil_clever_sim.inputs.SimulationKindSet` that represents the type of simulation this runner will use.
+    :param data: The final statevector output given after the simulation completes.
+                 The data will be in the form of a key value pair, with the key being a ket notation of a state (i.e 001, 010, 110)
+                 and the value will be a two tuple, with the first element being the complex amplitude, and the second as the probability out of 100% that this state will be measured.
+    """
+
+    Data = dict[str, Tuple[complex, float]]
     type: SimulationKindSet
     meta: SimulationRunner
-    data: dict[str, complex]
+    data: Data
     job: Task[Statevector]
 
     def __init__(self, meta: SimulationRunner):
@@ -167,11 +241,25 @@ class SimulationRunnerResult:
     def set_type(self, type: SimulationKindSet):
         self.type = type
 
-    def process(self, data: Statevector) -> dict[str, complex]:
-        self.data = data.to_dict(decimals=self.meta.OUTPUT_PRECISION)
+    def process(self, data: Statevector) -> Data:
+        out = data.to_dict(decimals=self.meta.OUTPUT_PRECISION)
+        probabilities = data.probabilities_dict(decimals=self.meta.OUTPUT_PRECISION)
+
+        for key, prob in probabilities.items():
+            out[key] = (out[key], prob)
+
+        self.data = out
         return self.data
 
     async def run(self, callback=None):
+        """Main entrypoint for the simulation runner, will automatically
+        use the correct simulation for the given kind of runner.
+        This method was moved from the parent class, as we wanted access to the timing data,
+        while also having each runner seperate form each other. This is so we can run the simulations
+        on different threads.
+
+        :param callback: Timing data callbacker, for the view layer
+        """
         self.timing_data.register_callback(callback)
         if self.type == SimulationKindSet.QC_METHOD:
             self.get_qc_circuit_metadata()
@@ -182,6 +270,7 @@ class SimulationRunnerResult:
             return await self.run_direct_calc()
 
     async def run_qc_simulation(self):
+        """Run the quantum siulation in an async fashion, polling the backend every 0.15s."""
         runner = self.meta
 
         paulis_circ = [
@@ -211,6 +300,7 @@ class SimulationRunnerResult:
         return self.process(st)
 
     async def run_op_simulation(self):
+        r"""Generate the operator and evolve a zero-initialised statevector $\ket{0}^{\otimes n}$"""
         runner = self.meta
 
         paulis_circ = [
@@ -359,3 +449,5 @@ if __name__ == "__main__":
         f"[operator method (time ratio {(end_1 - start_1)/(end_2-start_2) }% faster)] = \n",
         pprint.pformat(res.to_dict()),
     )
+
+    print("[statevector probabilities]", pprint.pformat(result.probabilities_dict()))
