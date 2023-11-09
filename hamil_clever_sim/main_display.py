@@ -1,4 +1,5 @@
 from textual import on
+from textual.binding import Binding
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import ContentSwitcher, Footer, Header, Tab, Tabs
@@ -12,10 +13,11 @@ class MainView(App):
     CSS_PATH = "./main.tcss"
 
     BINDINGS = [
-        (
+        Binding(
             "ctrl+q",
-            "action_quit",
+            "quit",
             "Quit simulator",
+            priority=True
         )
     ]
 
@@ -34,7 +36,8 @@ class MainView(App):
 
     @on(InputForm.FormSubmitted)
     async def handle_simulation_run(self, event: InputForm.FormSubmitted) -> None:
-        switcher = self.query_one("#app-main-display-switcher", ContentSwitcher)
+        switcher = self.query_one(
+            "#app-main-display-switcher", ContentSwitcher)
         tabber = self.query_one("#app-main-display-tabs", Tabs)
 
         id = f"simulation-{len(switcher.children)}"
@@ -53,5 +56,6 @@ class MainView(App):
 
     @on(Tabs.TabActivated)
     def handle_tab_active(self, event: Tabs.TabActivated) -> None:
-        switcher = self.query_one("#app-main-display-switcher", ContentSwitcher)
+        switcher = self.query_one(
+            "#app-main-display-switcher", ContentSwitcher)
         switcher.current = event.tab.id

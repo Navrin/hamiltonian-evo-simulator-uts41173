@@ -18,7 +18,8 @@ COLS = ("|𝜓⟩", "amplitude (ℝ)", "amplitude (ℂ)", "probability (%)")
 
 
 class StatevectorDisplay(Static):
-    data: Reactive[SimulationRunnerResult.Data | None] = reactive(None, layout=True)
+    data: Reactive[SimulationRunnerResult.Data |
+                   None] = reactive(None, layout=True)
     rows: Reactive[list[tuple[str, str, str]]] = reactive([])
     column_keys: list[ColumnKey] = []
     spark_data: Reactive[list[float]] = reactive([])
@@ -33,7 +34,7 @@ class StatevectorDisplay(Static):
     def compute_rows(self):
         if self.data is None:
             return []
-
+        # print(list(self.data.items()))
         rows = [
             (
                 f"|{label}⟩",
@@ -76,7 +77,8 @@ class StatevectorDisplay(Static):
     def handle_row_select(self, highlight: DataTable.RowHighlighted):
         cursor = highlight.cursor_row
         states = self.all_states
-        as_state = highlight.data_table.get_row_at(cursor)[0][1:-1]  # to remove the ket
+        as_state = highlight.data_table.get_row_at(
+            cursor)[0][1:-1]  # to remove the ket
         marked_cursor = states.index(as_state)
 
         self.marked_index = marked_cursor
