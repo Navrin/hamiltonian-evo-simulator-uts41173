@@ -46,7 +46,7 @@ This package requires python `v3.11.6`! This constraint is because of Qiskit, no
    1. `python ./hamil_clever_sim/entry.py`
 ### `docker`
 In classic developer fashion, why do work when someone else has already done it for you!
-A docker image is available on [docker hub](docker.io/navrin/hamil-sim). You can run this via `docker run -it navrin/hamil-sim`
+A docker image is available on [docker hub](https://hub.docker.com/r/navrin/hamil-sim). You can run this via `docker run -it navrin/hamil-sim`
 
 ## Usage
 
@@ -60,7 +60,7 @@ Most inputs will not pass the regex/validation, but some invalid inputs may stil
 
 ## Documentation
 
-Checkout [UPDATE LINK HERE] for documentation generated from docstrings.
+[Hosted documentation can be found here.](https://hamil-sim.uts.navr.in/_autosummary/hamil_clever_sim.html) This is for API referencing, generated from the docstrings. 
 
 ## Licensing 
 
